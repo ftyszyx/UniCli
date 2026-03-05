@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using UniCli.Remote;
 using UniCli.Server.Editor.Handlers;
 using UnityEditor;
 
@@ -11,7 +10,6 @@ namespace UniCli.Server.Editor
     {
         internal const string DisabledModulesConfigKey = "UniCli.disabledModules";
         internal const string EditorLoggingEnabledConfigKey = "UniCli.editor.logging.enabled";
-        internal const string RemoteDiscoveryLogConfigKey = "UniCli.remote.logCommandDiscovery";
 
         HashSet<string> LoadDisabledModules()
         {
@@ -36,7 +34,6 @@ namespace UniCli.Server.Editor
         {
             var value = enabled ? "1" : "0";
             EditorUserSettings.SetConfigValue(EditorLoggingEnabledConfigKey, value);
-            EditorUserSettings.SetConfigValue(RemoteDiscoveryLogConfigKey, value);
 
             ApplyEditorLoggingEnabled(enabled);
         }
@@ -44,19 +41,12 @@ namespace UniCli.Server.Editor
         internal static bool ReadEditorLoggingEnabled()
         {
             var raw = EditorUserSettings.GetConfigValue(EditorLoggingEnabledConfigKey);
-            if (string.IsNullOrEmpty(raw))
-            {
-                // Backward compatibility with the previous remote-only setting key.
-                raw = EditorUserSettings.GetConfigValue(RemoteDiscoveryLogConfigKey);
-            }
-
             return ParseEnabledFlag(raw, defaultValue: true);
         }
 
         internal static void ApplyEditorLoggingEnabled(bool enabled)
         {
             UniCliEditorLog.EnableLogs = enabled;
-            DebugCommandRegistry.EnableLogs = enabled;
         }
 
         internal static bool ParseEnabledFlag(string raw, bool defaultValue)
