@@ -8,6 +8,8 @@ description: >-
   settings, or project settings. Follow required safeguards such as
   `AssetDatabase.Import` after file changes and `Compile` verification after C#
   edits.
+metadata:
+  version: "1.1.0"
 ---
 
 # UniCli — Unity Editor CLI
