@@ -1,31 +1,49 @@
-using UniCli.Client;
+using System.Runtime.InteropServices;
 
 namespace UniCli.Client.Tests;
 
 public class NormalizePathForHashTests
 {
-    [Fact]
-    public void BackslashesAreReplacedWithForwardSlashes()
+    [SkippableFact]
+    public void BackslashesAreReplacedWithForwardSlashes_Unix()
     {
-        var result = ProjectIdentifier.NormalizePathForHash(@"C:\Users\dev\MyProject\Assets");
-
-        Assert.Equal("C:/Users/dev/MyProject/Assets", result);
+        Skip.If(RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
+        Assert.Equal("C:/Users/dev/MyProject/Assets", ProjectIdentifier.NormalizePathForHash(@"C:\Users\dev\MyProject\Assets"));
     }
 
-    [Fact]
-    public void ForwardSlashesArePreserved()
+    [SkippableFact]
+    public void BackslashesAreReplacedWithForwardSlashes_Windows()
     {
-        var result = ProjectIdentifier.NormalizePathForHash("C:/Users/dev/MyProject/Assets");
-
-        Assert.Equal("C:/Users/dev/MyProject/Assets", result);
+        Skip.IfNot(RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
+        Assert.Equal("c:/users/dev/myproject/assets", ProjectIdentifier.NormalizePathForHash(@"C:\Users\dev\MyProject\Assets"));
     }
 
-    [Fact]
-    public void MixedSeparatorsAreNormalized()
+    [SkippableFact]
+    public void ForwardSlashesArePreserved_Unix()
     {
-        var result = ProjectIdentifier.NormalizePathForHash(@"C:\Users/dev\MyProject/Assets");
+        Skip.If(RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
+        Assert.Equal("C:/Users/dev/MyProject/Assets", ProjectIdentifier.NormalizePathForHash("C:/Users/dev/MyProject/Assets"));
+    }
 
-        Assert.Equal("C:/Users/dev/MyProject/Assets", result);
+    [SkippableFact]
+    public void ForwardSlashesArePreserved_Windows()
+    {
+        Skip.IfNot(RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
+        Assert.Equal("c:/users/dev/myproject/assets", ProjectIdentifier.NormalizePathForHash("C:/Users/dev/MyProject/Assets"));
+    }
+
+    [SkippableFact]
+    public void MixedSeparatorsAreNormalized_Unix()
+    {
+        Skip.If(RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
+        Assert.Equal("C:/Users/dev/MyProject/Assets", ProjectIdentifier.NormalizePathForHash(@"C:\Users/dev\MyProject/Assets"));
+    }
+
+    [SkippableFact]
+    public void MixedSeparatorsAreNormalized_Windows()
+    {
+        Skip.IfNot(RuntimeInformation.IsOSPlatform(OSPlatform.Windows));
+        Assert.Equal("c:/users/dev/myproject/assets", ProjectIdentifier.NormalizePathForHash(@"C:\Users/dev\MyProject/Assets"));
     }
 }
 
