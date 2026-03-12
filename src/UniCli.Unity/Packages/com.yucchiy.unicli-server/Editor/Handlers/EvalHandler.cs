@@ -142,6 +142,7 @@ public static class {className}
 
         private static string[] GetAdditionalReferences()
         {
+            var seen = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var refs = new System.Collections.Generic.List<string>();
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
@@ -149,8 +150,10 @@ public static class {className}
                 try
                 {
                     var loc = asm.Location;
-                    if (!string.IsNullOrEmpty(loc))
-                        refs.Add(loc);
+                    if (string.IsNullOrEmpty(loc)) continue;
+                    if (!File.Exists(loc)) continue;
+                    if (!seen.Add(asm.GetName().Name)) continue;
+                    refs.Add(loc);
                 }
                 catch
                 {
