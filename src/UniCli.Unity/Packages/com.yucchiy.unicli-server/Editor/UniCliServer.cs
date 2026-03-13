@@ -71,7 +71,7 @@ namespace UniCli.Server.Editor
                 var tasks = _currentCommand is { IsCompleted: false }
                     ? new[] { _serverLoop, _currentCommand }
                     : new[] { _serverLoop };
-                Task.WaitAll(tasks, TimeSpan.FromMilliseconds(3000));
+                Task.WaitAll(tasks, TimeSpan.FromMilliseconds(500));
             }
             catch (AggregateException)
             {

@@ -343,7 +343,7 @@ namespace UniCli.Server.Editor
 
             try
             {
-                Task.WaitAll(allTasks, TimeSpan.FromMilliseconds(2000));
+                Task.WaitAll(allTasks, TimeSpan.FromMilliseconds(500));
             }
             catch (AggregateException ex) when (ex.InnerExceptions.All(e => e is OperationCanceledException))
             {
