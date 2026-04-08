@@ -38,11 +38,18 @@ public partial class Commands
             return Task.FromResult(OutputWriter.Write(result, json));
         }
 
+        var installation = ManifestEditor.GetInstallationInfo(projectRoot);
         var effectiveSource = string.IsNullOrEmpty(source) ? GetVersionedGitUrl() : source;
 
         if (update)
         {
-            return Task.FromResult(HandleUpdate(manifestPath, effectiveSource, json));
+            return Task.FromResult(HandleUpdate(projectRoot, manifestPath, effectiveSource, json));
+        }
+
+        if (installation.Installed)
+        {
+            var alreadyInstalledResult = BuildInstallResult(false, installation.Source ?? effectiveSource);
+            return Task.FromResult(OutputWriter.Write(alreadyInstalledResult, json));
         }
 
         bool added;
@@ -60,10 +67,17 @@ public partial class Commands
         return Task.FromResult(OutputWriter.Write(cliResult, json));
     }
 
-    private static int HandleUpdate(string manifestPath, string newSource, bool json)
+    private static int HandleUpdate(string projectRoot, string manifestPath, string newSource, bool json)
     {
         try
         {
+            if (ManifestEditor.HasEmbeddedPackage(projectRoot))
+            {
+                var result = CliResult.Error(
+                    $"{ManifestEditor.PackageName} is installed as an embedded package under Packages/. Replace that directory manually or remove it before using 'unicli install --update'.");
+                return OutputWriter.Write(result, json);
+            }
+
             var updated = ManifestEditor.UpdatePackageSource(manifestPath, newSource);
             if (!updated)
             {

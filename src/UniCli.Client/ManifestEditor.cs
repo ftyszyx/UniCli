@@ -8,13 +8,28 @@ internal static class ManifestEditor
 {
     public const string PackageName = "com.yucchiy.unicli-server";
 
-    public static string GetManifestPath(string projectRoot)
+    public static string GetPackagesPath(string projectRoot)
     {
         var normalized = projectRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         if (Path.GetFileName(normalized) == "Assets")
             normalized = Path.GetDirectoryName(normalized)!;
 
-        return Path.Combine(normalized, "Packages", "manifest.json");
+        return Path.Combine(normalized, "Packages");
+    }
+
+    public static string GetManifestPath(string projectRoot)
+    {
+        return Path.Combine(GetPackagesPath(projectRoot), "manifest.json");
+    }
+
+    public static string GetEmbeddedPackagePath(string projectRoot)
+    {
+        return Path.Combine(GetPackagesPath(projectRoot), PackageName);
+    }
+
+    public static bool HasEmbeddedPackage(string projectRoot)
+    {
+        return File.Exists(Path.Combine(GetEmbeddedPackagePath(projectRoot), "package.json"));
     }
 
     /// <summary>
@@ -31,6 +46,19 @@ internal static class ManifestEditor
         var value = deps?[PackageName];
 
         return value?.GetValue<string>();
+    }
+
+    public static PackageInstallationInfo GetInstallationInfo(string projectRoot)
+    {
+        var manifestPath = GetManifestPath(projectRoot);
+        var manifestSource = FindPackageSource(manifestPath);
+        if (manifestSource != null)
+            return new PackageInstallationInfo(true, manifestSource, "manifest");
+
+        if (HasEmbeddedPackage(projectRoot))
+            return new PackageInstallationInfo(true, "embedded", "embedded");
+
+        return new PackageInstallationInfo(false, null, null);
     }
 
     /// <summary>
@@ -150,3 +178,5 @@ internal static class ManifestEditor
         return indent.Length > 0 ? indent : "    ";
     }
 }
+
+internal sealed record PackageInstallationInfo(bool Installed, string? Source, string? Mode);

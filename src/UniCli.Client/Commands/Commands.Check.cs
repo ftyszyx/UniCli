@@ -24,9 +24,9 @@ public partial class Commands
             return OutputWriter.Write(result, json);
         }
 
-        var manifestPath = ManifestEditor.GetManifestPath(projectRoot);
-        var source = ManifestEditor.FindPackageSource(manifestPath);
-        var installed = source != null;
+        var installation = ManifestEditor.GetInstallationInfo(projectRoot);
+        var source = installation.Source;
+        var installed = installation.Installed;
 
         var serverRunning = false;
         string? serverVersion = null;
