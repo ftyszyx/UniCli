@@ -4,7 +4,7 @@ description: >-
   用于在任意接入 UniCli 的 Unity 工程中自动化 Unity Editor 工作流，包括安装服务端包、
   导入资源、编译、测试、场景/对象/Prefab/资源操作，以及调用项目内可用的 UniCli 命令。
 metadata:
-  version: "1.2.4"
+  version: "1.2.5"
 ---
 
 # UniCli Unity 开发技能
@@ -13,32 +13,45 @@ metadata:
 
 ## 首次安装
 
-如果当前 Unity 工程里还没有 `Packages/com.yucchiy.unicli-server`，先把 skill 自带的服务端包安装进去。
+为避免多开 Unity 工程时连错项目，推荐先把下面两个文件复制到 **当前 Unity 工程根目录** 再执行：
 
-推荐步骤：
+- `win64/unicli.exe`
+- `com.yucchiy.unicli-server.zip`
+
+也就是说，推荐目录形态类似：
+
+```text
+YourUnityProject/
+  Assets/
+  Packages/
+  unicli.exe
+  com.yucchiy.unicli-server.zip
+```
+
+如果当前 Unity 工程里还没有 `Packages/com.yucchiy.unicli-server`，先在 **工程根目录** 解压服务端包：
 
 ```powershell
-$project = "path/to/your-unity-project"
+$project = (Get-Location).Path
 $packageDir = Join-Path $project "Packages"
 $serverDir = Join-Path $packageDir "com.yucchiy.unicli-server"
-$serverZip = "com.yucchiy.unicli-server.zip"
+$serverZip = ".\\com.yucchiy.unicli-server.zip"
 
 if (-not (Test-Path $serverDir)) {
   Expand-Archive -Path $serverZip -DestinationPath $packageDir -Force
 }
 ```
 
-安装后再设置目标工程路径：
+然后在 **工程根目录** 直接执行：
+
+```powershell
+.\unicli.exe check --json
+```
+
+如果你不能在工程根目录执行，再显式指定目标工程路径：
 
 ```powershell
 $env:UNICLI_PROJECT = "path/to/your-unity-project"
-```
-
-如果 `unicli` 不在 PATH 中，优先使用 skill 目录中自带的 `unicli.exe`：
-
-```powershell
-$cli = "win64/unicli.exe"
-& $cli check --json
+.\win64\unicli.exe check --json
 ```
 
 ## 必须遵守的规则
@@ -54,17 +67,26 @@ $cli = "win64/unicli.exe"
 
 ## 推荐命令前缀
 
+推荐直接进入 Unity 工程根目录执行：
+
 ```powershell
-$env:UNICLI_PROJECT = "path/to/your-unity-project"
-$cli = "win64/unicli.exe"
+$cli = ".\unicli.exe"
 ```
 
 后续调用统一使用：
 
 ```powershell
+& $cli check --json
+& $cli status --json
 & $cli exec Compile --json
 & $cli commands --json
-& $cli exec GameObject.Find --namePattern "Camera" --json
+```
+
+如果 `unicli.exe` 不在工程根目录，而是仍放在 skill 目录里，再使用：
+
+```powershell
+$env:UNICLI_PROJECT = "path/to/your-unity-project"
+$cli = "win64/unicli.exe"
 ```
 
 ## 基础工作流
@@ -184,13 +206,14 @@ $cli = "win64/unicli.exe"
 
 ## 推荐执行顺序
 
-1. 如果缺少 `Packages/com.yucchiy.unicli-server`，先从 skill 自带 zip 安装。
-2. `check` / `status`
-3. 必要时 `commands --json` 确认命令面
-4. 改文件后 `AssetDatabase.Import`
-5. 改 C# 后 `Compile --json`
-6. 必要时运行 `TestRunner.*`
-7. 最后再做功能性命令 smoke test
+1. 先把 `unicli.exe` 和 `com.yucchiy.unicli-server.zip` 放到当前 Unity 工程根目录。
+2. 如果缺少 `Packages/com.yucchiy.unicli-server`，先从 zip 安装。
+3. `check` / `status`
+4. 必要时 `commands --json` 确认命令面
+5. 改文件后 `AssetDatabase.Import`
+6. 改 C# 后 `Compile --json`
+7. 必要时运行 `TestRunner.*`
+8. 最后再做功能性命令 smoke test
 
 ## 自定义命令开发
 
@@ -208,6 +231,8 @@ $cli = "win64/unicli.exe"
 
 ## 提示
 
+- 多个 Unity 工程同时打开时，最好始终在目标工程根目录执行 `.\unicli.exe`。
+- 如果必须跨目录执行，务必显式设置 `UNICLI_PROJECT`。
 - 大多数命令都支持 `--help` 查看字段定义。
 - 如果你不确定某个类型名或窗口名，先用 `Type.List` / `Window.List`。
 - 如果内置命令不够，优先评估是用 `eval` 一次性完成，还是新增 `CommandHandler` 作为可复用命令。
