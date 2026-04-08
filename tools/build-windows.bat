@@ -18,12 +18,15 @@ for %%I in ("%SCRIPT_DIR%..") do set "REPO_ROOT=%%~fI"
 
 set "PUBLISH_DIR=%REPO_ROOT%\publish\%RUNTIME_ID%\%CONFIGURATION%"
 set "ARCHIVE_PATH=%REPO_ROOT%\publish\unicli-%RUNTIME_ID%.zip"
+set "PACKAGE_SOURCE_DIR=%REPO_ROOT%\src\UniCli.Unity\Packages\com.yucchiy.unicli-server"
 set "SKILL_DIR=%REPO_ROOT%\.agents\skills\unity-development"
 set "SKILL_BIN_DIR=%SKILL_DIR%\win64"
 set "SKILL_DOC_DIR=%SKILL_DIR%\doc"
+set "SKILL_PACKAGE_ARCHIVE=%SKILL_DIR%\com.yucchiy.unicli-server.zip"
 set "CODEX_SKILL_DIR=%USERPROFILE%\.codex\skills\unity-development"
 set "CODEX_SKILL_BIN_DIR=%CODEX_SKILL_DIR%\win64"
 set "CODEX_SKILL_DOC_DIR=%CODEX_SKILL_DIR%\doc"
+set "CODEX_SKILL_PACKAGE_ARCHIVE=%CODEX_SKILL_DIR%\com.yucchiy.unicli-server.zip"
 
 echo [1/4] Building protocol project...
 dotnet build "%REPO_ROOT%\src\UniCli.Protocol" -c %CONFIGURATION%
@@ -41,6 +44,9 @@ copy /y "%PUBLISH_DIR%\unicli.exe" "%SKILL_BIN_DIR%\unicli.exe" >nul
 if errorlevel 1 goto :error
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Copy-Item -Recurse -Force '%REPO_ROOT%\doc\*' '%SKILL_DOC_DIR%'"
 if errorlevel 1 goto :error
+if exist "%SKILL_PACKAGE_ARCHIVE%" del /q "%SKILL_PACKAGE_ARCHIVE%"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '%PACKAGE_SOURCE_DIR%' -DestinationPath '%SKILL_PACKAGE_ARCHIVE%'"
+if errorlevel 1 goto :error
 
 if exist "%CODEX_SKILL_DIR%" (
   if not exist "%CODEX_SKILL_BIN_DIR%" mkdir "%CODEX_SKILL_BIN_DIR%"
@@ -49,6 +55,8 @@ if exist "%CODEX_SKILL_DIR%" (
   copy /y "%PUBLISH_DIR%\unicli.exe" "%CODEX_SKILL_BIN_DIR%\unicli.exe" >nul
   if errorlevel 1 goto :error
   powershell -NoProfile -ExecutionPolicy Bypass -Command "Copy-Item -Recurse -Force '%REPO_ROOT%\doc\*' '%CODEX_SKILL_DOC_DIR%'"
+  if errorlevel 1 goto :error
+  copy /y "%SKILL_PACKAGE_ARCHIVE%" "%CODEX_SKILL_PACKAGE_ARCHIVE%" >nul
   if errorlevel 1 goto :error
 )
 
@@ -64,6 +72,7 @@ echo Binary : %PUBLISH_DIR%\unicli.exe
 echo Archive: %ARCHIVE_PATH%
 echo Skill binary : %SKILL_BIN_DIR%\unicli.exe
 echo Skill docs   : %SKILL_DOC_DIR%
+echo Skill package: %SKILL_PACKAGE_ARCHIVE%
 exit /b 0
 
 :error

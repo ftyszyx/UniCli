@@ -4,3 +4,5 @@
 *.user
 publish
 .vs
+.agents/skills/unity-development/win64
+*.zip

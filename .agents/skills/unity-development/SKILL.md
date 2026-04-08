@@ -1,17 +1,34 @@
 ---
 name: unity-development
 description: >-
-  用于在任意接入 UniCli 的 Unity 工程中自动化 Unity Editor 工作流，包括导入资源、
-  编译、测试、场景/对象/Prefab/资源操作，以及调用项目内可用的 UniCli 命令。
+  用于在任意接入 UniCli 的 Unity 工程中自动化 Unity Editor 工作流，包括安装服务端包、
+  导入资源、编译、测试、场景/对象/Prefab/资源操作，以及调用项目内可用的 UniCli 命令。
 metadata:
-  version: "1.2.3"
+  version: "1.2.4"
 ---
 
 # UniCli Unity 开发技能
 
 这个技能用于 **任意接入了 UniCli 的 Unity 工程**，适合新项目或已有项目中的 Unity Editor 自动化工作流。
 
-如果 Unity 项目不在当前工作目录，请先设置目标工程路径：
+## 首次安装
+
+如果当前 Unity 工程里还没有 `Packages/com.yucchiy.unicli-server`，先把 skill 自带的服务端包安装进去。
+
+推荐步骤：
+
+```powershell
+$project = "path/to/your-unity-project"
+$packageDir = Join-Path $project "Packages"
+$serverDir = Join-Path $packageDir "com.yucchiy.unicli-server"
+$serverZip = "com.yucchiy.unicli-server.zip"
+
+if (-not (Test-Path $serverDir)) {
+  Expand-Archive -Path $serverZip -DestinationPath $packageDir -Force
+}
+```
+
+安装后再设置目标工程路径：
 
 ```powershell
 $env:UNICLI_PROJECT = "path/to/your-unity-project"
@@ -167,12 +184,13 @@ $cli = "win64/unicli.exe"
 
 ## 推荐执行顺序
 
-1. `check` / `status`
-2. 必要时 `commands --json` 确认命令面
-3. 改文件后 `AssetDatabase.Import`
-4. 改 C# 后 `Compile --json`
-5. 必要时运行 `TestRunner.*`
-6. 最后再做功能性命令 smoke test
+1. 如果缺少 `Packages/com.yucchiy.unicli-server`，先从 skill 自带 zip 安装。
+2. `check` / `status`
+3. 必要时 `commands --json` 确认命令面
+4. 改文件后 `AssetDatabase.Import`
+5. 改 C# 后 `Compile --json`
+6. 必要时运行 `TestRunner.*`
+7. 最后再做功能性命令 smoke test
 
 ## 自定义命令开发
 
