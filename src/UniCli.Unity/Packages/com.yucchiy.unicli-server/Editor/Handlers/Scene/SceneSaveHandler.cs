@@ -2,7 +2,9 @@ using System.Threading;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using UnityEditor;
 using UnityEditor.SceneManagement;
+using UnityEngine;
 using UnityEngine.SceneManagement;
 
 namespace UniCli.Server.Editor.Handlers
@@ -104,6 +106,234 @@ namespace UniCli.Server.Editor.Handlers
         }
     }
 
+    [Module("Scene")]
+    public sealed class SceneDuplicateHandler : CommandHandler<SceneDuplicateRequest, SceneDuplicateResponse>
+    {
+        private readonly EditorStateGuard _guard;
+
+        public SceneDuplicateHandler(EditorStateGuard guard)
+        {
+            _guard = guard;
+        }
+
+        public override string CommandName => "Scene.Duplicate";
+        public override string Description => "Duplicate a scene asset to a new path and optionally open it";
+
+        protected override bool TryWriteFormatted(SceneDuplicateResponse response, bool success, IFormatWriter writer)
+        {
+            if (success)
+                writer.WriteLine($"Duplicated scene from {response.sourcePath} to {response.destinationPath}");
+            else
+                writer.WriteLine("Failed to duplicate scene");
+
+            return true;
+        }
+
+        protected override ValueTask<SceneDuplicateResponse> ExecuteAsync(SceneDuplicateRequest request, CancellationToken cancellationToken)
+        {
+            using var scope = _guard.BeginScope(CommandName, GuardCondition.NotPlaying);
+
+            if (string.IsNullOrEmpty(request.destinationPath))
+                throw new ArgumentException("destinationPath is required");
+
+            Scene scene;
+            if (!string.IsNullOrEmpty(request.name) || !string.IsNullOrEmpty(request.path) || request.sceneIndex >= 0)
+            {
+                scene = SceneResolver.Resolve(request.name, request.path, request.sceneIndex);
+            }
+            else
+            {
+                scene = SceneManager.GetActiveScene();
+            }
+
+            if (!scene.IsValid() || string.IsNullOrEmpty(scene.path))
+            {
+                throw new CommandFailedException(
+                    $"Scene not found or has no saved path (name=\"{request.name}\", path=\"{request.path}\")",
+                    new SceneDuplicateResponse());
+            }
+
+            if (!AssetDatabase.CopyAsset(scene.path, request.destinationPath))
+            {
+                throw new CommandFailedException(
+                    $"Failed to duplicate scene from \"{scene.path}\" to \"{request.destinationPath}\"",
+                    new SceneDuplicateResponse());
+            }
+
+            AssetDatabase.Refresh();
+
+            string duplicatedSceneName = System.IO.Path.GetFileNameWithoutExtension(request.destinationPath);
+            bool opened = false;
+            if (request.openAfterDuplicate)
+            {
+                var duplicatedScene = EditorSceneManager.OpenScene(
+                    request.destinationPath,
+                    request.additive ? OpenSceneMode.Additive : OpenSceneMode.Single);
+                opened = duplicatedScene.IsValid();
+                if (opened)
+                    duplicatedSceneName = duplicatedScene.name;
+            }
+
+            return new ValueTask<SceneDuplicateResponse>(new SceneDuplicateResponse
+            {
+                sourcePath = scene.path,
+                destinationPath = request.destinationPath,
+                sceneName = duplicatedSceneName,
+                opened = opened
+            });
+        }
+    }
+
+    [Module("Scene")]
+    public sealed class SceneRenameHandler : CommandHandler<SceneRenameRequest, SceneRenameResponse>
+    {
+        private readonly EditorStateGuard _guard;
+
+        public SceneRenameHandler(EditorStateGuard guard)
+        {
+            _guard = guard;
+        }
+
+        public override string CommandName => "Scene.Rename";
+        public override string Description => "Rename a saved scene asset while keeping it in the same folder";
+
+        protected override bool TryWriteFormatted(SceneRenameResponse response, bool success, IFormatWriter writer)
+        {
+            if (success)
+                writer.WriteLine($"Renamed scene from {response.oldPath} to {response.newPath}");
+            else
+                writer.WriteLine("Failed to rename scene");
+
+            return true;
+        }
+
+        protected override ValueTask<SceneRenameResponse> ExecuteAsync(SceneRenameRequest request, CancellationToken cancellationToken)
+        {
+            using var scope = _guard.BeginScope(CommandName, GuardCondition.NotPlaying);
+
+            if (string.IsNullOrEmpty(request.newName))
+                throw new ArgumentException("newName is required");
+
+            Scene scene;
+            if (!string.IsNullOrEmpty(request.name) || !string.IsNullOrEmpty(request.path) || request.sceneIndex >= 0)
+            {
+                scene = SceneResolver.Resolve(request.name, request.path, request.sceneIndex);
+            }
+            else
+            {
+                scene = SceneManager.GetActiveScene();
+            }
+
+            if (!scene.IsValid() || string.IsNullOrEmpty(scene.path))
+            {
+                throw new CommandFailedException(
+                    $"Scene not found or has no saved path (name=\"{request.name}\", path=\"{request.path}\")",
+                    new SceneRenameResponse());
+            }
+
+            var extension = System.IO.Path.GetExtension(scene.path);
+            var normalizedName = request.newName.EndsWith(extension, StringComparison.OrdinalIgnoreCase)
+                ? System.IO.Path.GetFileNameWithoutExtension(request.newName)
+                : request.newName;
+
+            var error = AssetDatabase.RenameAsset(scene.path, normalizedName);
+            if (!string.IsNullOrEmpty(error))
+            {
+                throw new CommandFailedException(
+                    $"Failed to rename scene: {error}",
+                    new SceneRenameResponse());
+            }
+
+            AssetDatabase.Refresh();
+
+            var parent = System.IO.Path.GetDirectoryName(scene.path)?.Replace("\\", "/") ?? "";
+            var newPath = string.IsNullOrEmpty(parent)
+                ? normalizedName + extension
+                : $"{parent}/{normalizedName}{extension}";
+
+            return new ValueTask<SceneRenameResponse>(new SceneRenameResponse
+            {
+                oldPath = scene.path,
+                newPath = newPath,
+                sceneName = normalizedName
+            });
+        }
+    }
+
+    [Module("Scene")]
+    public sealed class SceneRemoveMissingScriptsHandler : CommandHandler<SceneRemoveMissingScriptsRequest, SceneRemoveMissingScriptsResponse>
+    {
+        private readonly EditorStateGuard _guard;
+
+        public SceneRemoveMissingScriptsHandler(EditorStateGuard guard)
+        {
+            _guard = guard;
+        }
+
+        public override string CommandName => "Scene.RemoveMissingScripts";
+        public override string Description => "Remove missing scripts from all GameObjects in a loaded scene";
+
+        protected override bool TryWriteFormatted(SceneRemoveMissingScriptsResponse response, bool success, IFormatWriter writer)
+        {
+            if (success)
+                writer.WriteLine($"Removed {response.removedCount} missing script(s) across {response.gameObjectCount} GameObject(s) in {response.sceneName}");
+            else
+                writer.WriteLine("Failed to remove missing scripts from scene");
+
+            return true;
+        }
+
+        protected override ValueTask<SceneRemoveMissingScriptsResponse> ExecuteAsync(SceneRemoveMissingScriptsRequest request, CancellationToken cancellationToken)
+        {
+            using var scope = _guard.BeginScope(CommandName, GuardCondition.NotPlaying);
+
+            Scene scene;
+            if (!string.IsNullOrEmpty(request.name) || !string.IsNullOrEmpty(request.path) || request.sceneIndex >= 0)
+            {
+                scene = SceneResolver.Resolve(request.name, request.path, request.sceneIndex);
+            }
+            else
+            {
+                scene = SceneManager.GetActiveScene();
+            }
+
+            if (!scene.IsValid() || !scene.isLoaded)
+            {
+                throw new CommandFailedException(
+                    $"Scene not found or not loaded (name=\"{request.name}\", path=\"{request.path}\")",
+                    new SceneRemoveMissingScriptsResponse());
+            }
+
+            var removedCount = 0;
+            var gameObjectCount = 0;
+            foreach (var root in scene.GetRootGameObjects())
+            {
+                RemoveMissingScriptsRecursive(root, ref removedCount, ref gameObjectCount);
+            }
+
+            return new ValueTask<SceneRemoveMissingScriptsResponse>(new SceneRemoveMissingScriptsResponse
+            {
+                sceneName = scene.name,
+                scenePath = scene.path,
+                removedCount = removedCount,
+                gameObjectCount = gameObjectCount
+            });
+        }
+
+        private static void RemoveMissingScriptsRecursive(GameObject go, ref int removedCount, ref int gameObjectCount)
+        {
+            gameObjectCount++;
+            Undo.RegisterCompleteObjectUndo(go, "Remove Missing Scripts");
+            removedCount += GameObjectUtility.RemoveMonoBehavioursWithMissingScript(go);
+
+            var transform = go.transform;
+            for (var i = 0; i < transform.childCount; i++)
+            {
+                RemoveMissingScriptsRecursive(transform.GetChild(i).gameObject, ref removedCount, ref gameObjectCount);
+            }
+        }
+    }
+
     [Serializable]
     public class SceneSaveRequest
     {
@@ -119,5 +349,59 @@ namespace UniCli.Server.Editor.Handlers
     {
         public string[] savedScenePaths;
         public int savedCount;
+    }
+
+    [Serializable]
+    public class SceneDuplicateRequest
+    {
+        public string name = "";
+        public string path = "";
+        public int sceneIndex = -1;
+        public string destinationPath = "";
+        public bool openAfterDuplicate;
+        public bool additive;
+    }
+
+    [Serializable]
+    public class SceneDuplicateResponse
+    {
+        public string sourcePath;
+        public string destinationPath;
+        public string sceneName;
+        public bool opened;
+    }
+
+    [Serializable]
+    public class SceneRenameRequest
+    {
+        public string name = "";
+        public string path = "";
+        public int sceneIndex = -1;
+        public string newName = "";
+    }
+
+    [Serializable]
+    public class SceneRenameResponse
+    {
+        public string oldPath;
+        public string newPath;
+        public string sceneName;
+    }
+
+    [Serializable]
+    public class SceneRemoveMissingScriptsRequest
+    {
+        public string name = "";
+        public string path = "";
+        public int sceneIndex = -1;
+    }
+
+    [Serializable]
+    public class SceneRemoveMissingScriptsResponse
+    {
+        public string sceneName;
+        public string scenePath;
+        public int removedCount;
+        public int gameObjectCount;
     }
 }

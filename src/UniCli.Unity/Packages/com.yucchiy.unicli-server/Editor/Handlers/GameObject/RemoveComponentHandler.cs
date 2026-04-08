@@ -57,6 +57,75 @@ namespace UniCli.Server.Editor.Handlers
         }
     }
 
+    [Module("GameObject")]
+    public sealed class RemoveComponentByTypeHandler : CommandHandler<RemoveComponentByTypeRequest, RemoveComponentByTypeResponse>
+    {
+        public override string CommandName => "GameObject.RemoveComponentByType";
+        public override string Description => "Remove a component from a GameObject by component type name";
+
+        protected override bool TryWriteFormatted(RemoveComponentByTypeResponse response, bool success, IFormatWriter writer)
+        {
+            if (success)
+                writer.WriteLine($"Removed {response.typeName} from {response.gameObjectName}");
+            else
+                writer.WriteLine("Failed to remove component by type");
+
+            return true;
+        }
+
+        protected override ValueTask<RemoveComponentByTypeResponse> ExecuteAsync(RemoveComponentByTypeRequest request, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(request.typeName))
+                throw new ArgumentException("typeName is required");
+
+            var go = GameObjectResolver.ResolveByIdOrPath(request.instanceId, request.path);
+            if (go == null)
+            {
+                throw new CommandFailedException(
+                    $"GameObject not found (instanceId={request.instanceId}, path=\"{request.path}\")",
+                    new RemoveComponentByTypeResponse());
+            }
+
+            var components = go.GetComponents<Component>();
+            Component matched = null;
+            foreach (var component in components)
+            {
+                if (component == null) continue;
+                var type = component.GetType();
+                if (type.FullName == request.typeName || type.Name == request.typeName)
+                {
+                    matched = component;
+                    break;
+                }
+            }
+
+            if (matched == null)
+            {
+                throw new CommandFailedException(
+                    $"Component type '{request.typeName}' not found on '{go.name}'",
+                    new RemoveComponentByTypeResponse());
+            }
+
+            if (matched is Transform)
+            {
+                throw new CommandFailedException(
+                    "Cannot remove Transform component",
+                    new RemoveComponentByTypeResponse());
+            }
+
+            var typeName = matched.GetType().FullName;
+            var componentInstanceId = matched.GetInstanceID();
+            Undo.DestroyObjectImmediate(matched);
+
+            return new ValueTask<RemoveComponentByTypeResponse>(new RemoveComponentByTypeResponse
+            {
+                gameObjectName = go.name,
+                typeName = typeName,
+                componentInstanceId = componentInstanceId
+            });
+        }
+    }
+
     [Serializable]
     public class RemoveComponentRequest
     {
@@ -65,6 +134,22 @@ namespace UniCli.Server.Editor.Handlers
 
     [Serializable]
     public class RemoveComponentResponse
+    {
+        public string gameObjectName;
+        public string typeName;
+        public int componentInstanceId;
+    }
+
+    [Serializable]
+    public class RemoveComponentByTypeRequest
+    {
+        public int instanceId;
+        public string path = "";
+        public string typeName = "";
+    }
+
+    [Serializable]
+    public class RemoveComponentByTypeResponse
     {
         public string gameObjectName;
         public string typeName;

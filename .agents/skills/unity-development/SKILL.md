@@ -1,232 +1,196 @@
 ---
 name: unity-development
 description: >-
-  Use for Unity Editor automation through UniCli in projects where `unicli` is
-  available: running `unicli exec`/`unicli eval`, editing files under `Assets/`
-  or `Packages/`, compiling Unity code, running EditMode/PlayMode tests, and
-  creating or modifying GameObjects, scenes, prefabs, assets, packages, build
-  settings, or project settings. Follow required safeguards such as
-  `AssetDatabase.Import` after file changes and `Compile` verification after C#
-  edits.
+  用于在任意接入 UniCli 的 Unity 工程中自动化 Unity Editor 工作流，包括导入资源、
+  编译、测试、场景/对象/Prefab/资源操作，以及调用项目内可用的 UniCli 命令。
 metadata:
-  version: "1.2.2"
+  version: "1.2.3"
 ---
 
-# UniCli — Unity Editor CLI
+# UniCli Unity 开发技能
 
-UniCli lets you interact with Unity Editor directly from the terminal.
-The CLI (`unicli`) communicates with the Unity Editor over named pipes, so the Editor must be open with the `com.yucchiy.unicli-server` package installed.
+这个技能用于 **任意接入了 UniCli 的 Unity 工程**，适合新项目或已有项目中的 Unity Editor 自动化工作流。
 
-## RULES — Always Follow These
+如果 Unity 项目不在当前工作目录，请先设置目标工程路径：
 
-1. **After creating/modifying ANY file under `Assets/` or `Packages/`**: Run `unicli exec AssetDatabase.Import --path "<path>" --json` to generate `.meta` files. **Never create `.meta` files manually** — always let Unity generate them via this command. Unity requires `.meta` files for every asset — skipping this causes missing references, broken imports, and compilation errors. This applies to all file types: `.cs`, `.asmdef`, `.asset`, `.prefab`, directories, etc.
-2. **After modifying C# code in the Unity project**: Run `unicli exec Compile --json` to verify compilation.
-3. **Always use `--json`** when parsing output programmatically.
-4. **If connection to Unity Editor fails**: Retry 2–3 times, then ask the user to confirm Unity Editor is running with the project open.
-5. **For platform-specific verification**: Use `unicli exec BuildPlayer.Compile --target <platform> --json` to catch platform-specific errors (missing `#if` guards, unsupported APIs, etc.).
-6. **When running tests**: Always use the default `--resultFilter failures` (or `--resultFilter none` for summary-only) to keep output minimal. Only use `--resultFilter all` when you specifically need to inspect individual passed test details. This prevents large test suites from flooding context. Stack traces are omitted by default (`--stackTraceLines 0`); use `--stackTraceLines 3` when you need to diagnose a failure location.
-7. **When checking console logs**: Use `--logType "Warning,Error"` to filter out informational noise and focus on actionable issues. Stack traces are omitted by default; use `--stackTraceLines 3` when debugging errors.
-8. **Discover commands dynamically**: Use `unicli commands --json` to list all available commands and `unicli exec <command> --help` to see parameters for any command. `--help` includes nested type details when applicable, and `commands --json` provides nested schemas via each command's `requestTypeDetails` and `responseTypeDetails`. Match nested type details by `typeId`; `type` and `typeName` are display labels and may not be unique. Do not rely on memorized command lists — the project may have custom commands.
-
-## Project Path
-
-By default, `unicli` looks for a Unity project in the current working directory.
-If the Unity project is in a subdirectory, set the `UNICLI_PROJECT` environment variable:
-
-```bash
-export UNICLI_PROJECT=path/to/unity/project
-unicli exec Compile --json
+```powershell
+$env:UNICLI_PROJECT = "path/to/your-unity-project"
 ```
 
-Or prefix each command:
+如果 `unicli` 不在 PATH 中，优先使用 skill 目录中自带的 `unicli.exe`：
 
-```bash
-UNICLI_PROJECT=path/to/unity/project unicli exec Compile --json
+```powershell
+$cli = "win64/unicli.exe"
+& $cli check --json
 ```
 
-## Prerequisites
+## 必须遵守的规则
 
-Before running commands, verify that the CLI is installed and the Editor is reachable:
+1. 修改 `Assets/` 或 `Packages/` 下任意文件后，必须运行 `AssetDatabase.Import`，让 Unity 自动生成或刷新 `.meta`，不要手写 `.meta`。
+2. 修改任何 Unity C# 代码后，必须运行 `Compile --json` 验证是否通过编译。
+3. 需要结构化结果时，统一带 `--json`。
+4. 如果 Unity Editor 未连接，先重试 2 到 3 次；仍失败再确认 Editor 是否已打开当前项目。
+5. 涉及平台差异时，用 `BuildPlayer.Compile --target <platform> --json` 做额外验证。
+6. 测试默认使用最小输出：`TestRunner.RunEditMode --resultFilter failures --json`。
+7. 查控制台默认过滤 `Warning,Error`，避免信息噪音。
+8. 不要硬记命令列表，优先用 `unicli commands --json` 和 `unicli exec <command> --help` 动态发现。
 
-```bash
-unicli check
+## 推荐命令前缀
+
+```powershell
+$env:UNICLI_PROJECT = "path/to/your-unity-project"
+$cli = "win64/unicli.exe"
 ```
 
-If `unicli check` reports that the server package is not installed, run `unicli install` to install it:
+后续调用统一使用：
 
-```bash
-unicli install
+```powershell
+& $cli exec Compile --json
+& $cli commands --json
+& $cli exec GameObject.Find --namePattern "Camera" --json
 ```
 
-If the server package version does not match the CLI version, run `unicli install --update` to update it:
+## 基础工作流
 
-```bash
-unicli install --update
+### 1. 连通性检查
+
+```powershell
+& $cli check --json
+& $cli status --json
 ```
 
-If the package is installed but the connection fails, make sure Unity Editor is open with the target project loaded. Retry a few times — the Editor may need a moment to start the server.
+### 2. 导入与编译
 
-## Executing Commands
-
-Run commands with `unicli exec <command>`. Pass parameters as `--key value` flags:
-
-```bash
-unicli exec GameObject.Find --name "Main Camera" --json
+```powershell
+& $cli exec AssetDatabase.Import --path "Assets/Scripts/Foo.cs" --json
+& $cli exec Compile --json --timeout 120000
 ```
 
-Boolean flags can be passed without a value:
+### 3. 测试
 
-```bash
-unicli exec GameObject.Find --includeInactive --json
+```powershell
+& $cli exec TestRunner.RunEditMode --json
+& $cli exec TestRunner.RunPlayMode --json
+& $cli exec TestRunner.List --mode EditMode --json
 ```
 
-Array parameters can be passed by repeating the same flag:
+### 4. 动态执行 C#
 
-```bash
-unicli exec BuildPlayer.Build --locationPathName "Builds/Test.app" --options Development --options ConnectWithProfiler --json
+```powershell
+& $cli eval 'return UnityEngine.Application.unityVersion;' --json
 ```
 
-### Common options
+## 常用命令类别
 
-- `--json` — Output in JSON format (recommended for structured processing)
-- `--timeout <ms>` — Set command timeout in milliseconds
-- `--no-focus` — Don't bring Unity Editor to front
-- `--help` — Show command parameters and nested type details
+### 资源类
 
-## Key Workflows
+- `AssetDatabase.Find`
+- `AssetDatabase.GetPath`
+- `AssetDatabase.Import`
+- `AssetDatabase.Refresh`
+- `AssetDatabase.Copy`
+- `AssetDatabase.Move`
+- `AssetDatabase.Rename`
+- `AssetDatabase.Duplicate`
+- `AssetDatabase.Delete`
+- `AssetDatabase.CreateFolder`
+- `AssetDatabase.CreateTextAsset`
+- `AssetDatabase.ReadTextAsset`
+- `AssetDatabase.WriteTextAsset`
+- `AssetDatabase.CreateMaterialAsset`
+- `AssetDatabase.CreateScriptableObjectAsset`
 
-**Compile and run tests:**
+### 场景类
 
-```bash
-unicli exec Compile --json
-unicli exec TestRunner.RunEditMode --json
-unicli exec TestRunner.RunPlayMode --json
+- `Scene.List`
+- `Scene.GetActive`
+- `Scene.Open`
+- `Scene.Save`
+- `Scene.New`
+- `Scene.Close`
+- `Scene.SetActive`
+- `Scene.Duplicate`
+- `Scene.Rename`
+- `Scene.RemoveMissingScripts`
+
+### GameObject / Selection 类
+
+- `GameObject.Find`
+- `GameObject.Create`
+- `GameObject.Destroy`
+- `GameObject.Duplicate`
+- `GameObject.SetTransform`
+- `GameObject.SetParent`
+- `GameObject.SetActive`
+- `GameObject.AddComponent`
+- `GameObject.RemoveComponent`
+- `GameObject.RemoveComponentByType`
+- `GameObject.RemoveMissingScripts`
+- `Selection.Get`
+- `Selection.SetAsset`
+- `Selection.SetAssets`
+- `Selection.SetGameObject`
+- `Selection.SetGameObjects`
+- `Selection.Ping`
+- `Selection.Frame`
+
+### Prefab 类
+
+- `Prefab.Save`
+- `Prefab.Instantiate`
+- `Prefab.GetStatus`
+- `Prefab.Apply`
+- `Prefab.Revert`
+- `Prefab.OverrideStatus`
+- `Prefab.OverrideDetails`
+- `Prefab.Unpack`
+- `PrefabStage.Open`
+- `PrefabStage.GetCurrent`
+- `PrefabStage.SaveCurrent`
+- `PrefabStage.Close`
+
+### 编辑器窗口类
+
+- `Window.List`
+- `Window.Open`
+- `Window.Focus`
+- `Window.FocusProject`
+- `Window.FocusHierarchy`
+- `Window.Create`
+
+## 文档入口
+
+完整命令文档优先看：
+
+- 中文版：`doc/commands.zh-CN.md`
+- 英文版：`doc/commands.md`
+
+## 推荐执行顺序
+
+1. `check` / `status`
+2. 必要时 `commands --json` 确认命令面
+3. 改文件后 `AssetDatabase.Import`
+4. 改 C# 后 `Compile --json`
+5. 必要时运行 `TestRunner.*`
+6. 最后再做功能性命令 smoke test
+
+## 自定义命令开发
+
+需要扩展新的 Unity 侧命令时，建议遵循 UniCli 常见模式：
+
+1. 在项目内负责 UniCli 命令的 handler 目录下添加或修改 `CommandHandler<TRequest, TResponse>`。
+2. 请求/响应类型使用 `[Serializable]` + `public fields`。
+3. 修改后运行：
+
+```powershell
+& $cli exec AssetDatabase.Import --path "Assets/..." --json
+& $cli exec Compile --json
+& $cli commands --json
 ```
 
-**Inspect and modify settings:**
+## 提示
 
-```bash
-unicli exec PlayerSettings.Inspect --json
-unicli eval 'PlayerSettings.companyName = "MyCompany";' --json
-```
-
-**Dynamic C# code execution (Eval):**
-
-`unicli eval` compiles and executes arbitrary C# code in the Unity Editor context. Use shell heredocs for multi-line code:
-
-```bash
-unicli eval 'return Application.unityVersion;' --json
-
-unicli eval "$(cat <<'EOF'
-var go = GameObject.Find("Main Camera");
-return go.transform.position;
-EOF
-)" --json
-```
-
-Options:
-- `--declarations '<code>'` — Additional type declarations (classes, structs, enums) included outside the Execute method
-- The generated eval code receives a `cancellationToken` variable for cooperative cancellation with `async`/`await`
-
-## Running Custom Code
-
-When built-in commands don't cover what you need, choose the right approach:
-
-1. **One-shot tasks → Eval**: Use `unicli eval` for ad-hoc operations, quick inspections, prototyping, and tasks that don't need to be reused. No files to create or compile — just pass the code directly.
-2. **Reusable project commands → CommandHandler**: Use `CommandHandler` when the operation will be called repeatedly or is part of the project's workflow. This provides type-safe parameters, structured responses, and discoverability via `unicli commands`.
-
-**Connect to a running player:**
-
-`Connection.*` commands manage the Unity Editor's PlayerConnection — used to connect to Development Builds running on devices or the local machine. This connection is required for remote debug commands and profiler data collection.
-
-```bash
-unicli exec Connection.List --json                          # List available targets
-unicli exec Connection.Connect '{"id":-1}' --json           # Connect by player ID
-unicli exec Connection.Connect '{"ip":"192.168.1.100"}' --json  # Connect by IP
-unicli exec Connection.Connect '{"deviceId":"SERIAL"}' --json   # Connect by device serial
-unicli exec Connection.Status --json                        # Check connection status
-```
-
-**Invoke remote debug commands on connected player:**
-
-`Remote.*` commands invoke debug commands on a connected Development Build. Requires: `UNICLI_REMOTE` scripting define symbol + Development Build with Autoconnect Profiler enabled.
-
-```bash
-unicli exec Remote.List --json
-unicli exec Remote.Invoke '{"command":"Debug.Stats"}' --json
-unicli exec Remote.Invoke '{"command":"Debug.GetPlayerPref","data":"{\"key\":\"HighScore\",\"type\":\"int\"}"}' --json
-```
-
-Built-in debug commands: `Debug.SystemInfo`, `Debug.Stats`, `Debug.GetLogs`, `Debug.GetHierarchy`, `Debug.FindGameObjects`, `Debug.GetScenes`, `Debug.GetPlayerPref`
-
-## Custom Command Handlers
-
-The server auto-discovers all `ICommandHandler` implementations via `TypeCache`, so no manual registration is required.
-
-Place custom handlers under `Assets/Editor/UniCli/` with a dedicated asmdef:
-
-```bash
-# 1. Create asmdef and add reference to UniCli.Server.Editor
-unicli exec AssemblyDefinition.Create --path "Assets/Editor/UniCli/MyProject.UniCli.Editor.asmdef" --name "MyProject.UniCli.Editor" --editorOnly --json
-unicli exec AssemblyDefinition.AddReference --path "Assets/Editor/UniCli/MyProject.UniCli.Editor.asmdef" --reference "UniCli.Server.Editor" --json
-
-# 2. Create handler script, then import and compile
-unicli exec AssetDatabase.Import --path "Assets/Editor/UniCli" --json
-unicli exec Compile --json
-
-# 3. Verify registration and execute
-unicli commands --json
-unicli exec MyCategory.MyAction --targetName "test" --json
-```
-
-### Handler implementation
-
-```csharp
-using System.Threading;
-using System.Threading.Tasks;
-using UniCli.Protocol;
-using UniCli.Server.Editor.Handlers;
-
-namespace MyProject.UniCli.Editor.Handlers
-{
-    [System.Serializable]
-    public class MyRequest
-    {
-        public string targetName = "";
-    }
-
-    [System.Serializable]
-    public class MyResponse
-    {
-        public string result;
-    }
-
-    public sealed class MyCustomHandler : CommandHandler<MyRequest, MyResponse>
-    {
-        public override string CommandName => "MyCategory.MyAction";
-        public override string Description => "Description shown in unicli commands";
-
-        protected override ValueTask<MyResponse> ExecuteAsync(MyRequest request, CancellationToken cancellationToken)
-        {
-            return new ValueTask<MyResponse>(new MyResponse
-            {
-                result = $"Processed {request.targetName}"
-            });
-        }
-    }
-}
-```
-
-Key rules:
-- Request/Response types must be `[Serializable]` with **public fields** (not properties) — required by `JsonUtility`
-- Use `Unit` as `TRequest` when no input is needed, or as `TResponse` when no output is needed
-- Throw `CommandFailedException` with response data on failure
-- For async operations, use `TaskCompletionSource` + `await` with `WithCancellation(cancellationToken)` to wait for Unity callbacks
-- Constructor parameters are resolved from `ServiceRegistry` for dependency injection
-
-## Tips
-
-- Run `unicli commands --json` to discover all available commands, including project-specific custom commands.
-- Run `unicli exec <command> --help` to see parameters, types, defaults, and nested type details for any command.
-- Run `unicli commands --json` to get machine-readable schemas; nested types are represented by each command's `requestTypeDetails` and `responseTypeDetails`, and `typeId` is the stable key for matching them.
-- If a command times out, increase the timeout: `unicli exec Compile --timeout 60000`.
+- 大多数命令都支持 `--help` 查看字段定义。
+- 如果你不确定某个类型名或窗口名，先用 `Type.List` / `Window.List`。
+- 如果内置命令不够，优先评估是用 `eval` 一次性完成，还是新增 `CommandHandler` 作为可复用命令。
+- 如果项目有自己的命令文档，优先以项目文档和 `commands --json` 的实际输出为准。

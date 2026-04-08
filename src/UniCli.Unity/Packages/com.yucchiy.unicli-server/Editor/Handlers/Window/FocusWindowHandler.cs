@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using UniCli.Protocol;
 using UnityEditor;
 using UnityEngine;
 
@@ -46,6 +47,59 @@ namespace UniCli.Server.Editor.Handlers
             var window = (EditorWindow)windows[0];
             window.Focus();
 
+            return new ValueTask<FocusWindowResponse>(new FocusWindowResponse { typeName = type.FullName });
+        }
+    }
+
+    public sealed class FocusProjectWindowHandler : CommandHandler<Unit, FocusWindowResponse>
+    {
+        public override string CommandName => "Window.FocusProject";
+        public override string Description => "Focus the Unity Project window";
+
+        protected override bool TryWriteFormatted(FocusWindowResponse response, bool success, IFormatWriter writer)
+        {
+            if (success)
+                writer.WriteLine("Focused: UnityEditor.ProjectBrowser");
+            return true;
+        }
+
+        protected override ValueTask<FocusWindowResponse> ExecuteAsync(Unit request, CancellationToken cancellationToken)
+        {
+            var type = WindowResolver.FindWindowType("UnityEditor.ProjectBrowser");
+            if (type != null)
+            {
+                EditorWindow.GetWindow(type).Focus();
+                return new ValueTask<FocusWindowResponse>(new FocusWindowResponse { typeName = type.FullName });
+            }
+
+            EditorUtility.FocusProjectWindow();
+            return new ValueTask<FocusWindowResponse>(new FocusWindowResponse { typeName = "UnityEditor.ProjectBrowser" });
+        }
+    }
+
+    public sealed class FocusHierarchyWindowHandler : CommandHandler<Unit, FocusWindowResponse>
+    {
+        public override string CommandName => "Window.FocusHierarchy";
+        public override string Description => "Focus the Unity Hierarchy window";
+
+        protected override bool TryWriteFormatted(FocusWindowResponse response, bool success, IFormatWriter writer)
+        {
+            if (success)
+                writer.WriteLine("Focused: UnityEditor.SceneHierarchyWindow");
+            return true;
+        }
+
+        protected override ValueTask<FocusWindowResponse> ExecuteAsync(Unit request, CancellationToken cancellationToken)
+        {
+            var type = WindowResolver.FindWindowType("UnityEditor.SceneHierarchyWindow");
+            if (type == null)
+            {
+                throw new CommandFailedException(
+                    "UnityEditor.SceneHierarchyWindow type not found.",
+                    new FocusWindowResponse());
+            }
+
+            EditorWindow.GetWindow(type).Focus();
             return new ValueTask<FocusWindowResponse>(new FocusWindowResponse { typeName = type.FullName });
         }
     }
